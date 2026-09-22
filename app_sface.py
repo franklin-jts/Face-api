@@ -16,6 +16,7 @@ import logging
 from collections import deque
 from typing import Dict, Tuple, Optional
 from pathlib import Path
+import sys
 
 # ==============================
 # Logging Configuration
@@ -26,6 +27,12 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+# ==============================
+# Disable InsightFace auto-download
+# ==============================
+os.environ['INSIGHTFACE_DISABLE_CACHE'] = '1'
+os.environ['HOME'] = '/tmp'
 
 # ==============================
 # Load .env variables

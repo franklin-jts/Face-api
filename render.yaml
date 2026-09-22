@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: face-recognition-api
+    env: python
+    region: oregon
+    plan: free
+    runtime: python310
+    
+    buildCommand: pip install -r requirements.txt --no-cache-dir
+    startCommand: gunicorn -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:$PORT -t 120 app_sface:app
+    
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "true"
+      - key: PORT
+        value: "10000"
+      - key: INSIGHTFACE_DISABLE_CACHE
+        value: "1"
+      - key: HOME
+        value: "/tmp"
+    
+    healthCheckPath: /health
+    healthCheckTimeout: 30
+
