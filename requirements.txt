@@ -1,0 +1,8 @@
+            fastapi
+            uvicorn
+            gunicorn
+            numpy
+            opencv-python-headless
+            insightface
+onnxruntime
+            python-dotenv

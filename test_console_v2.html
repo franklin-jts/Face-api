@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition API — Advanced Test Console (YuNet+SFace)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.95;
+        }
+
+        .auth-section {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .auth-section label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .auth-section input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .auth-section input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .stored-section {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            border-left: 5px solid #28a745;
+        }
+
+        .stored-section h2 {
+            color: #28a745;
+            margin-bottom: 20px;
+            font-size: 1.6em;
+        }
+
+        .sections {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 968px) {
+            .sections {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.6em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .file-input-label {
+            display: block;
+            padding: 12px 15px;
+            background: #f5f5f5;
+            border: 2px dashed #ccc;
+            border-radius: 6px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+            color: #666;
+        }
+
+        .file-input-label:hover {
+            background: #efefef;
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .file-name {
+            margin-top: 8px;
+            font-size: 0.9em;
+            color: #28a745;
+            font-weight: 600;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .button-group button {
+            flex: 1;
+        }
+
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .preview-container {
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .preview-container img {
+            max-width: 100%;
+            max-height: 250px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .video-container {
+            position: relative;
+            margin: 15px 0;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #000;
+        }
+
+        video {
+            width: 100%;
+            display: block;
+        }
+
+        .camera-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .camera-controls button {
+            flex: 1;
+            padding: 10px;
+            font-size: 0.9em;
+        }
+
+        .response-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+
+        .response-label {
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 0.95em;
+        }
+
+        .response-body {
+            background: white;
+            padding: 12px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            max-height: 300px;
+            overflow-y: auto;
+            color: #333;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .response-status {
+            padding: 10px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+
+        .response-status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .response-status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .response-status.pending {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 12px 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            color: #0c3a66;
+            font-size: 0.95em;
+        }
+
+        .stored-status {
+            background: #d4edda;
+            border: 2px solid #28a745;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            color: #155724;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .timestamp {
+            font-size: 0.85em;
+            color: #999;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🎯 Advanced Face Recognition Test Console</h1>
+            <p>YuNet + SFace Engine | Workflow-Based Testing</p>
+        </div>
+
+        <!-- Auth Section -->
+        <div class="auth-section">
+            <label for="authToken">Auth Token</label>
+            <input 
+                type="text" 
+                id="authToken" 
+                placeholder="Enter your Bearer token (e.g., secret-token-123)"
+                value="secret-token-123"
+            >
+        </div>
+
+        <!-- Stored Reference Section -->
+        <div class="stored-section">
+            <h2>📚 Step 1: Store Reference Image</h2>
+            <div class="info-box">
+                ✅ Upload a reference image once. It will be stored on the server and available for all subsequent tests.
+            </div>
+
+            <div class="form-group">
+                <label>Reference Image (Stored on Server)</label>
+                <div class="file-input-wrapper">
+                    <input 
+                        type="file" 
+                        id="storedRefFile" 
+                        accept="image/jpeg,image/png"
+                        onchange="onStoredRefSelected(event)"
+                    >
+                    <label for="storedRefFile" class="file-input-label">📤 Choose Reference Image</label>
+                </div>
+                <div id="storedRefFileName" class="file-name"></div>
+            </div>
+
+            <div id="storedRefPreview" class="preview-container"></div>
+
+            <button class="btn-success" onclick="uploadStoredReference()" style="width: 100%;">💾 Upload & Store Reference</button>
+
+            <div id="storedRefResponse" class="response-section" style="display: none; margin-top: 15px;">
+                <div class="response-label">Server Response:</div>
+                <div id="storedRefResponseStatus" class="response-status"></div>
+                <div id="storedRefResponseBody" class="response-body"></div>
+            </div>
+
+            <div id="storedStatus" class="stored-status" style="display: none;">
+                ✅ Reference image stored successfully and ready for testing!
+            </div>
+        </div>
+
+        <!-- Test Sections -->
+        <div class="sections">
+            <!-- Face Liveness Test Section -->
+            <div class="section">
+                <h2>👁️ Step 2a: Test Liveness</h2>
+                <div class="info-box">
+                    Test if the stored reference image is a live face or a spoof/photo.
+                </div>
+
+                <div class="form-group">
+                    <label>Select Image to Test</label>
+                    <div class="button-group" style="margin-bottom: 10px;">
+                        <button class="btn-secondary" onclick="useStoredAsLivenessTest()" title="Use stored reference image">📎 Use Stored</button>
+                        <button class="btn-secondary" onclick="startLivenessCamera()">📷 Use Camera</button>
+                    </div>
+                </div>
+
+                <div id="livenessPreview" class="preview-container"></div>
+                <div id="livenessFileName" class="file-name"></div>
+
+                <button class="btn-primary" onclick="checkLiveness()" style="width: 100%; margin-top: 15px;">🔍 Check Liveness</button>
+
+                <div id="livenessResponse" class="response-section" style="display: none; margin-top: 15px;">
+                    <div class="response-label">Liveness Result:</div>
+                    <div id="livenessResponseStatus" class="response-status"></div>
+                    <div id="livenessResponseBody" class="response-body"></div>
+                    <div class="timestamp" id="livenessTimestamp"></div>
+                </div>
+            </div>
+
+            <!-- Face Comparison Test Section -->
+            <div class="section">
+                <h2>🔄 Step 2b: Test Face Comparison</h2>
+                <div class="info-box">
+                    Compare stored reference with another image to verify it's the same person.
+                </div>
+
+                <div class="form-group">
+                    <label>Select Comparison Image</label>
+                    <div class="button-group" style="margin-bottom: 10px;">
+                        <button class="btn-secondary" onclick="onCompareFile2Selected({target: {files: []}}, true)">📎 Upload New</button>
+                        <button class="btn-secondary" onclick="startCompareCamera()">📷 Use Camera</button>
+                    </div>
+                </div>
+
+                <div id="compareFile2Name" class="file-name"></div>
+                <div id="comparePreview2" class="preview-container"></div>
+
+                <div class="form-group">
+                    <label for="compareThreshold">Match Threshold (0-100, default 70)</label>
+                    <input 
+                        type="number" 
+                        id="compareThreshold" 
+                        min="0" 
+                        max="100" 
+                        value="70"
+                        style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 6px;"
+                    >
+                </div>
+
+                <button class="btn-primary" onclick="compareFaces()" style="width: 100%;">🔍 Compare Faces</button>
+
+                <div id="compareResponse" class="response-section" style="display: none; margin-top: 15px;">
+                    <div class="response-label">Comparison Result:</div>
+                    <div id="compareResponseStatus" class="response-status"></div>
+                    <div id="compareResponseBody" class="response-body"></div>
+                    <div class="timestamp" id="compareTimestamp"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align: center; color: white; margin-top: 40px; font-size: 0.95em;">
+            <p>📡 Endpoints call <strong>localhost:8001</strong></p>
+            <p>📖 <a href="/docs" style="color: #ffd700; text-decoration: none; font-weight: 600;">Full API Docs</a> | <a href="/test_console.html" style="color: #ffd700; text-decoration: none; font-weight: 600;">Simple UI</a></p>
+            <p style="margin-top: 20px; opacity: 0.8;">Powered by OpenCV YuNet + SFace</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        const API_BASE = '';
+        let storedRefFile = null;
+        let compareFile2 = null;
+
+        function getAuthToken() {
+            return document.getElementById('authToken').value || 'secret-token-123';
+        }
+
+        // ======== STEP 1: Store Reference ========
+        function onStoredRefSelected(event) {
+            storedRefFile = event.target.files[0];
+            if (storedRefFile) {
+                document.getElementById('storedRefFileName').textContent = `✓ ${storedRefFile.name}`;
+                showPreview(storedRefFile, 'storedRefPreview');
+            }
+        }
+
+        async function uploadStoredReference() {
+            if (!storedRefFile) {
+                alert('❌ Please select a reference image');
+                return;
+            }
+
+            const responseDiv = document.getElementById('storedRefResponse');
+            const statusDiv = document.getElementById('storedRefResponseStatus');
+            const bodyDiv = document.getElementById('storedRefResponseBody');
+
+            statusDiv.textContent = '⏳ Uploading...';
+            statusDiv.className = 'response-status pending';
+            responseDiv.style.display = 'block';
+
+            try {
+                const formData = new FormData();
+                formData.append('reference', storedRefFile);
+
+                const response = await fetch(`${API_BASE}/uploadImage`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${getAuthToken()}` },
+                    body: formData,
+                });
+
+                const data = await response.json();
+                const isSuccess = response.ok && data.status;
+
+                statusDiv.textContent = isSuccess ? '✅ Reference Stored' : '❌ Failed';
+                statusDiv.className = `response-status ${isSuccess ? 'success' : 'error'}`;
+                bodyDiv.textContent = JSON.stringify(data, null, 2);
+
+                if (isSuccess) {
+                    document.getElementById('storedStatus').style.display = 'block';
+                }
+            } catch (err) {
+                statusDiv.textContent = '❌ Error';
+                statusDiv.className = 'response-status error';
+                bodyDiv.textContent = `Error: ${err.message}`;
+            }
+        }
+
+        // ======== STEP 2A: Liveness Test ========
+        function useStoredAsLivenessTest() {
+            if (!storedRefFile) {
+                alert('❌ Please store a reference image first');
+                return;
+            }
+            document.getElementById('livenessFileName').textContent = `✓ Using stored: ${storedRefFile.name}`;
+            showPreview(storedRefFile, 'livenessPreview');
+        }
+
+        async function startLivenessCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'user',
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    } 
+                });
+                
+                const video = document.createElement('video');
+                video.id = 'livenessVideo';
+                video.autoplay = true;
+                video.muted = true;  // IMPORTANT: Prevents audio issues
+                video.playsinline = true;
+                video.srcObject = stream;
+                video.style.width = '100%';
+                video.style.display = 'block';
+
+                const container = document.createElement('div');
+                container.className = 'video-container';
+                container.style.background = '#000';
+                container.appendChild(video);
+                
+                const controls = document.createElement('div');
+                controls.className = 'camera-controls';
+                controls.innerHTML = `
+                    <button class="btn-primary" onclick="captureLivenessFrame()">📸 Capture</button>
+                    <button class="btn-secondary" onclick="stopLivenessCamera()">❌ Cancel</button>
+                `;
+                container.appendChild(controls);
+                
+                document.getElementById('livenessPreview').replaceWith(container);
+                container.id = 'livenessPreview';
+            } catch (err) {
+                alert('❌ Camera access denied: ' + err.message);
+                console.error('Camera error:', err);
+            }
+        }
+
+        function captureLivenessFrame() {
+            const video = document.getElementById('livenessVideo');
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            canvas.toBlob((blob) => {
+                livenessFile = new File([blob], 'liveness_capture.jpg', { type: 'image/jpeg' });
+                document.getElementById('livenessFileName').textContent = '✓ liveness_capture.jpg';
+                stopLivenessCamera();
+                const preview = document.getElementById('livenessPreview');
+                preview.innerHTML = `<img src="${canvas.toDataURL()}" alt="capture">`;
+            }, 'image/jpeg', 0.95);
+        }
+
+        function stopLivenessCamera() {
+            const video = document.getElementById('livenessVideo');
+            if (video && video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+            }
+        }
+
+        async function checkLiveness() {
+            if (!livenessFile && !storedRefFile) {
+                alert('❌ Please select or store a reference image');
+                return;
+            }
+
+            const fileToTest = livenessFile || storedRefFile;
+
+            const responseDiv = document.getElementById('livenessResponse');
+            const statusDiv = document.getElementById('livenessResponseStatus');
+            const bodyDiv = document.getElementById('livenessResponseBody');
+
+            statusDiv.textContent = '⏳ Checking...';
+            statusDiv.className = 'response-status pending';
+            responseDiv.style.display = 'block';
+
+            try {
+                const formData = new FormData();
+                formData.append('capture', fileToTest);
+                formData.append('store_db', false);
+
+                const response = await fetch(`${API_BASE}/faceLiveness`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${getAuthToken()}` },
+                    body: formData,
+                });
+
+                const data = await response.json();
+                const isSuccess = response.ok && data.status;
+
+                statusDiv.textContent = isSuccess ? '✅ Live Face Detected' : '⚠️ Not Live / Spoof Detected';
+                statusDiv.className = `response-status ${isSuccess ? 'success' : 'error'}`;
+                bodyDiv.textContent = JSON.stringify(data, null, 2);
+                document.getElementById('livenessTimestamp').textContent = `📅 ${new Date().toLocaleString()}`;
+            } catch (err) {
+                statusDiv.textContent = '❌ Error';
+                statusDiv.className = 'response-status error';
+                bodyDiv.textContent = `Error: ${err.message}`;
+            }
+        }
+
+        // ======== STEP 2B: Face Comparison ========
+        function onCompareFile2Selected(event, manual = false) {
+            if (event.target.files && event.target.files.length > 0) {
+                compareFile2 = event.target.files[0];
+                document.getElementById('compareFile2Name').textContent = `✓ ${compareFile2.name}`;
+                showPreview(compareFile2, 'comparePreview2');
+            } else if (manual) {
+                // Show file picker
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/jpeg,image/png';
+                input.onchange = (e) => onCompareFile2Selected(e);
+                input.click();
+            }
+        }
+
+        async function startCompareCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'user',
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    } 
+                });
+                
+                const video = document.createElement('video');
+                video.id = 'compareVideo';
+                video.autoplay = true;
+                video.muted = true;  // IMPORTANT: Prevents audio issues
+                video.playsinline = true;
+                video.srcObject = stream;
+                video.style.width = '100%';
+                video.style.display = 'block';
+
+                const container = document.createElement('div');
+                container.className = 'video-container';
+                container.style.background = '#000';
+                container.appendChild(video);
+                
+                const controls = document.createElement('div');
+                controls.className = 'camera-controls';
+                controls.innerHTML = `
+                    <button class="btn-primary" onclick="captureCompareFrame()">📸 Capture</button>
+                    <button class="btn-secondary" onclick="stopCompareCamera()">❌ Cancel</button>
+                `;
+                container.appendChild(controls);
+                
+                document.getElementById('comparePreview2').replaceWith(container);
+                container.id = 'comparePreview2';
+            } catch (err) {
+                alert('❌ Camera access denied: ' + err.message);
+                console.error('Camera error:', err);
+            }
+        }
+
+        function captureCompareFrame() {
+            const video = document.getElementById('compareVideo');
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            canvas.toBlob((blob) => {
+                compareFile2 = new File([blob], 'camera_capture.jpg', { type: 'image/jpeg' });
+                document.getElementById('compareFile2Name').textContent = '✓ camera_capture.jpg';
+                stopCompareCamera();
+                const preview = document.getElementById('comparePreview2');
+                preview.innerHTML = `<img src="${canvas.toDataURL()}" alt="capture">`;
+            }, 'image/jpeg', 0.95);
+        }
+
+        function stopCompareCamera() {
+            const video = document.getElementById('compareVideo');
+            if (video && video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+            }
+        }
+
+        async function compareFaces() {
+            const responseDiv = document.getElementById('compareResponse');
+            const statusDiv = document.getElementById('compareResponseStatus');
+            const bodyDiv = document.getElementById('compareResponseBody');
+            
+            if (!storedRefFile || !compareFile2) {
+                statusDiv.textContent = '❌ Missing Required Images';
+                statusDiv.className = 'response-status error';
+                if (!storedRefFile && !compareFile2) {
+                    bodyDiv.textContent = JSON.stringify({
+                        "status": false,
+                        "message": "Missing both reference and live capture images",
+                        "error": "STEP 1 Required: Please upload & store reference image first\nSTEP 2 Required: Please capture or select a live image",
+                        "details": {
+                            "reference_image": "Not uploaded",
+                            "live_image": "Not captured",
+                            "action_required": "Complete both steps"
+                        }
+                    }, null, 2);
+                } else if (!storedRefFile) {
+                    bodyDiv.textContent = JSON.stringify({
+                        "status": false,
+                        "message": "Reference image not provided",
+                        "error": "STEP 1 Required",
+                        "details": {
+                            "reference_image": "Not uploaded",
+                            "live_image": "Ready",
+                            "action_required": "1. Click 'Choose File'\n2. Select your photo\n3. Click '💾 Upload & Store Reference'"
+                        }
+                    }, null, 2);
+                } else {
+                    bodyDiv.textContent = JSON.stringify({
+                        "status": false,
+                        "message": "Live capture image not provided",
+                        "error": "STEP 2 Required",
+                        "details": {
+                            "reference_image": "Ready",
+                            "live_image": "Not captured",
+                            "action_required": "1. Click 'Use Camera'\n2. Capture your face\n3. Or click 'Upload File'"
+                        }
+                    }, null, 2);
+                }
+                responseDiv.style.display = 'block';
+                return;
+            }
+
+            const threshold = parseFloat(document.getElementById('compareThreshold').value) || 70;
+
+            statusDiv.textContent = '⏳ Comparing faces...';
+            statusDiv.className = 'response-status pending';
+            responseDiv.style.display = 'block';
+
+            try {
+                const formData = new FormData();
+                formData.append('file1', storedRefFile);
+                formData.append('file2', compareFile2);
+                formData.append('threshold', threshold);
+
+                const response = await fetch(`${API_BASE}/employeeFaceCompare`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${getAuthToken()}` },
+                    body: formData,
+                });
+
+                const data = await response.json();
+                const isSuccess = response.ok && data.status;
+                
+                // Extract match score for status display only (not in response)
+                const matchScore = data.data?.match_score || 0;
+                const thresholdUsed = threshold;
+                const scoreAnalysis = matchScore >= thresholdUsed 
+                    ? `✅ Score (${matchScore.toFixed(1)}) >= Threshold (${thresholdUsed}) = MATCH`
+                    : `❌ Score (${matchScore.toFixed(1)}) < Threshold (${thresholdUsed}) = NO MATCH`;
+
+                statusDiv.textContent = isSuccess 
+                    ? `✅ Faces Match - Same Person! ${scoreAnalysis}` 
+                    : `❌ Faces Do Not Match - ${scoreAnalysis}`;
+                statusDiv.className = `response-status ${isSuccess ? 'success' : 'error'}`;
+                
+                // Show CLEAN response without analysis (as-is from API)
+                bodyDiv.textContent = JSON.stringify(data, null, 2);
+                document.getElementById('compareTimestamp').textContent = `📅 ${new Date().toLocaleString()}`;
+            } catch (err) {
+                statusDiv.textContent = '❌ Error';
+                statusDiv.className = 'response-status error';
+                bodyDiv.textContent = `Error: ${err.message}`;
+            }
+        }
+
+        function showPreview(file, previewId) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const container = document.getElementById(previewId);
+                container.innerHTML = `<img src="${e.target.result}" alt="preview">`;
+            };
+            reader.readAsDataURL(file);
+        }
+    </script>
+</body>
+</html>

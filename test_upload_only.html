@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition - Upload Only Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        .header h1 { font-size: 2em; margin-bottom: 10px; }
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        input[type="text"], input[type="file"], input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1em;
+        }
+        input:focus { outline: none; border-color: #667eea; }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button:hover { background: #5568d3; transform: translateY(-2px); }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .preview { margin: 20px 0; text-align: center; }
+        .preview img { max-width: 100%; max-height: 250px; border-radius: 6px; }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            border-radius: 6px;
+        }
+        .response-body {
+            background: white;
+            padding: 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .status {
+            padding: 10px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .pending { background: #d1ecf1; color: #0c5460; }
+        .file-input-label {
+            display: block;
+            padding: 12px;
+            background: #f5f5f5;
+            border: 2px dashed #ccc;
+            border-radius: 6px;
+            text-align: center;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+        .file-input-label:hover { background: #efefef; border-color: #667eea; }
+        .file-name { color: #28a745; font-weight: 600; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📤 Face Recognition - Upload Only</h1>
+            <p>No camera required - test via file upload</p>
+        </div>
+
+        <div class="section">
+            <h2>🔑 Authentication</h2>
+            <input 
+                type="text" 
+                id="token" 
+                placeholder="Enter Bearer token (default: secret-token-123)" 
+                value="secret-token-123"
+            >
+        </div>
+
+        <div class="section">
+            <h2>📚 Step 1: Upload Reference</h2>
+            <p style="margin-bottom: 15px; color: #666;">Upload a reference face image (will be stored locally)</p>
+            <label class="file-input-label">
+                <input type="file" id="refFile" accept="image/*" onchange="onRefSelected(event)" style="display:none;">
+                📤 Choose Reference Image
+            </label>
+            <div id="refName" class="file-name"></div>
+            <div id="refPreview" class="preview"></div>
+            <button onclick="uploadRef()">💾 Upload & Store</button>
+            <div id="refResponse" class="response" style="display:none;">
+                <div id="refStatus" class="status"></div>
+                <div id="refBody" class="response-body"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>👁️ Step 2: Test Liveness</h2>
+            <p style="margin-bottom: 15px; color: #666;">Test if stored reference is a live face (select same or different image)</p>
+            <label class="file-input-label">
+                <input type="file" id="livenessFile" accept="image/*" onchange="onLivenessSelected(event)" style="display:none;">
+                📤 Choose Test Image
+            </label>
+            <div id="livenessName" class="file-name"></div>
+            <div id="livenessPreview" class="preview"></div>
+            <button onclick="checkLiveness()">🔍 Check Liveness</button>
+            <div id="livenessResponse" class="response" style="display:none;">
+                <div id="livenessStatus" class="status"></div>
+                <div id="livenessBody" class="response-body"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🔄 Step 3: Compare Faces</h2>
+            <p style="margin-bottom: 15px; color: #666;">Compare stored reference with another image</p>
+            <div>
+                <label for="compareFile">Select comparison image (use different face or angle)</label>
+                <label class="file-input-label">
+                    <input type="file" id="compareFile" accept="image/*" onchange="onCompareSelected(event)" style="display:none;">
+                    📤 Choose Comparison Image
+                </label>
+                <div id="compareName" class="file-name"></div>
+                <div id="comparePreview" class="preview"></div>
+                <label for="threshold">Match Threshold (0-100, default 70)</label>
+                <input type="number" id="threshold" min="0" max="100" value="70">
+            </div>
+            <button onclick="compareFaces()">🔍 Compare Faces</button>
+            <div id="compareResponse" class="response" style="display:none;">
+                <div id="compareStatus" class="status"></div>
+                <div id="compareBody" class="response-body"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📋 Stored Images</h2>
+            <p style="margin-bottom: 15px; color: #666;">View all stored reference images</p>
+            <button onclick="listStored()">📂 List Stored Images</button>
+            <div id="storedResponse" class="response" style="display:none; margin-top: 15px;">
+                <div id="storedStatus" class="status"></div>
+                <div id="storedBody" class="response-body"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        let refFile = null;
+        let livenessFile = null;
+        let compareFile = null;
+
+        function getToken() {
+            return document.getElementById('token').value || 'secret-token-123';
+        }
+
+        function showPreview(file, containerId) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById(containerId).innerHTML = `<img src="${e.target.result}" alt="preview">`;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function onRefSelected(e) {
+            refFile = e.target.files[0];
+            document.getElementById('refName').textContent = `✓ ${refFile.name}`;
+            showPreview(refFile, 'refPreview');
+        }
+
+        function onLivenessSelected(e) {
+            livenessFile = e.target.files[0];
+            document.getElementById('livenessName').textContent = `✓ ${livenessFile.name}`;
+            showPreview(livenessFile, 'livenessPreview');
+        }
+
+        function onCompareSelected(e) {
+            compareFile = e.target.files[0];
+            document.getElementById('compareName').textContent = `✓ ${compareFile.name}`;
+            showPreview(compareFile, 'comparePreview');
+        }
+
+        async function uploadRef() {
+            if (!refFile) { alert('❌ Select reference image'); return; }
+            const div = document.getElementById('refResponse');
+            const status = document.getElementById('refStatus');
+            const body = document.getElementById('refBody');
+            status.textContent = '⏳ Uploading...';
+            status.className = 'status pending';
+            div.style.display = 'block';
+            try {
+                const form = new FormData();
+                form.append('reference', refFile);
+                const res = await fetch(`${API_BASE}/uploadImage`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${getToken()}` },
+                    body: form
+                });
+                const data = await res.json();
+                const success = res.ok && data.status;
+                status.textContent = success ? '✅ Stored!' : '❌ Failed';
+                status.className = `status ${success ? 'success' : 'error'}`;
+                body.textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                status.textContent = '❌ Error';
+                status.className = 'status error';
+                body.textContent = e.message;
+            }
+        }
+
+        async function checkLiveness() {
+            if (!livenessFile) { alert('❌ Select test image'); return; }
+            const div = document.getElementById('livenessResponse');
+            const status = document.getElementById('livenessStatus');
+            const body = document.getElementById('livenessBody');
+            status.textContent = '⏳ Checking...';
+            status.className = 'status pending';
+            div.style.display = 'block';
+            try {
+                const form = new FormData();
+                form.append('capture', livenessFile);
+                form.append('store_db', false);
+                const res = await fetch(`${API_BASE}/faceLiveness`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${getToken()}` },
+                    body: form
+                });
+                const data = await res.json();
+                const success = res.ok && data.status;
+                status.textContent = success ? '✅ Live Face!' : '⚠️ Not Live/Spoof';
+                status.className = `status ${success ? 'success' : 'error'}`;
+                body.textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                status.textContent = '❌ Error';
+                status.className = 'status error';
+                body.textContent = e.message;
+            }
+        }
+
+        async function compareFaces() {
+            if (!refFile || !compareFile) { alert('❌ Select both reference and comparison'); return; }
+            const div = document.getElementById('compareResponse');
+            const status = document.getElementById('compareStatus');
+            const body = document.getElementById('compareBody');
+            status.textContent = '⏳ Comparing...';
+            status.className = 'status pending';
+            div.style.display = 'block';
+            try {
+                const form = new FormData();
+                form.append('file1', refFile);
+                form.append('file2', compareFile);
+                form.append('threshold', document.getElementById('threshold').value);
+                const res = await fetch(`${API_BASE}/employeeFaceCompare`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${getToken()}` },
+                    body: form
+                });
+                const data = await res.json();
+                const success = res.ok && data.status;
+                status.textContent = success ? '✅ Same Person!' : '❌ Different';
+                status.className = `status ${success ? 'success' : 'error'}`;
+                body.textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                status.textContent = '❌ Error';
+                status.className = 'status error';
+                body.textContent = e.message;
+            }
+        }
+
+        async function listStored() {
+            const div = document.getElementById('storedResponse');
+            const status = document.getElementById('storedStatus');
+            const body = document.getElementById('storedBody');
+            status.textContent = '⏳ Loading...';
+            status.className = 'status pending';
+            div.style.display = 'block';
+            try {
+                const res = await fetch(`${API_BASE}/dev/stored-images`, {
+                    headers: { 'Authorization': `Bearer ${getToken()}` }
+                });
+                const data = await res.json();
+                status.textContent = '✅ Loaded';
+                status.className = 'status success';
+                body.textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                status.textContent = '❌ Error';
+                status.className = 'status error';
+                body.textContent = e.message;
+            }
+        }
+    </script>
+</body>
+</html>
