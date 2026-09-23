@@ -1,0 +1,314 @@
+================================================================================
+🚀 AWS EC2 DEPLOYMENT - QUICK START (30 MINUTES)
+================================================================================
+
+STEP-BY-STEP COMMANDS
+================================================================================
+
+STEP 1: CREATE EC2 INSTANCE
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Go to: https://console.aws.amazon.com
+2. Search: EC2
+3. Click: Instances → Launch Instance
+4. Name: face-recognition-api
+5. OS: Ubuntu 22.04 LTS
+6. Type: t2.small (recommended) or t2.micro (free tier)
+7. Key Pair: Create new → face-api-key.pem (SAVE THIS!)
+8. Security: Allow SSH (22), HTTP (80), HTTPS (443), Custom (8000)
+9. Storage: 30 GB
+10. Launch!
+
+Wait 2-3 minutes for instance to start...
+
+STEP 2: GET YOUR INSTANCE IP
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. EC2 Dashboard → Instances
+2. Click your instance
+3. Copy: "Public IPv4 address" (e.g., 54.123.45.67)
+
+STEP 3: CONNECT TO INSTANCE
+━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Option A: SSH (if you have SSH client)
+────────────────────────────────────
+cd ~/Downloads
+chmod 400 face-api-key.pem
+ssh -i face-api-key.pem ubuntu@54.123.45.67
+
+Option B: AWS Console (Easiest - no setup needed)
+────────────────────────────────────────────────
+1. EC2 Dashboard → Select instance
+2. Click: Connect
+3. Choose: Session Manager tab
+4. Click: Connect
+(Browser terminal opens)
+
+STEP 4: INSTALL DEPENDENCIES (Run these commands)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+sudo apt update
+sudo apt upgrade -y
+sudo apt install -y python3 python3-pip python3-venv
+sudo apt install -y build-essential libssl-dev libffi-dev python3-dev
+sudo apt install -y git libopencv-dev python3-opencv
+sudo apt install -y libsm6 libxext6 libxrender-dev
+
+STEP 5: CLONE YOUR PROJECT
+━━━━━━━━━━━━━━━━━━━━━━━
+
+mkdir -p /home/ubuntu/apps
+cd /home/ubuntu/apps
+git clone https://github.com/YOUR_USERNAME/FaceRecognitionAPI.git
+cd FaceRecognitionAPI
+
+STEP 6: SET UP VIRTUAL ENVIRONMENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+STEP 7: TEST API
+━━━━━━━━━━━━━
+
+python3 app_sface.py
+
+Expected output:
+  ✓ YuNet detector loaded successfully
+  ✓ SFace recognizer loaded successfully
+  INFO:     Uvicorn running on http://0.0.0.0:8000
+
+Press Ctrl+C to stop
+
+STEP 8: CREATE SYSTEMD SERVICE (Auto-start on reboot)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+sudo nano /etc/systemd/system/face-api.service
+
+Paste this exactly:
+──────────────────
+
+[Unit]
+Description=Face Recognition API
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/apps/FaceRecognitionAPI
+Environment="PATH=/home/ubuntu/apps/FaceRecognitionAPI/venv/bin"
+ExecStart=/home/ubuntu/apps/FaceRecognitionAPI/venv/bin/python3 app_sface.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+
+──────────────────
+
+Save: Ctrl+X → Y → Enter
+
+STEP 9: START SERVICE
+━━━━━━━━━━━━━━━━
+
+sudo systemctl daemon-reload
+sudo systemctl enable face-api
+sudo systemctl start face-api
+sudo systemctl status face-api
+
+Should show: ● face-api.service - Face Recognition API
+                 Loaded: loaded
+                 Active: active (running)
+
+STEP 10: INSTALL NGINX (Reverse Proxy - Optional)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+sudo apt install -y nginx
+
+sudo nano /etc/nginx/sites-available/face-api
+
+Paste this:
+──────────
+
+server {
+    listen 80;
+    server_name _;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+
+──────────
+
+Save: Ctrl+X → Y → Enter
+
+sudo ln -s /etc/nginx/sites-available/face-api /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl start nginx
+sudo systemctl enable nginx
+
+STEP 11: TEST FROM YOUR MACHINE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+curl http://54.123.45.67/health
+
+Should return:
+  {"status": true, "message": "Service is running", ...}
+
+STEP 12: ACCESS YOUR API
+━━━━━━━━━━━━━━━━━━━━━━
+
+Health Check:
+  http://54.123.45.67/health
+
+Web Console:
+  http://54.123.45.67/test_console_v2.html
+
+API Base URL:
+  http://54.123.45.67
+
+================================================================================
+ENDPOINT SUMMARY
+================================================================================
+
+GET  /health                              → Check if API is running
+POST /uploadImage                         → Upload reference image
+POST /faceLiveness                        → Test face liveness
+POST /employeeFaceCompare                 → Compare faces
+GET  /dev/stored-images                   → List images
+POST /dev/reset-cache                     → Clear storage
+
+================================================================================
+USEFUL COMMANDS
+================================================================================
+
+SSH into instance:
+  ssh -i face-api-key.pem ubuntu@YOUR_IP
+
+Check service status:
+  sudo systemctl status face-api
+
+View logs:
+  sudo journalctl -u face-api -f
+
+Restart service:
+  sudo systemctl restart face-api
+
+Stop service:
+  sudo systemctl stop face-api
+
+Update code from GitHub:
+  cd /home/ubuntu/apps/FaceRecognitionAPI
+  git pull origin main
+  sudo systemctl restart face-api
+
+Check disk usage:
+  df -h
+
+Check memory:
+  free -h
+
+Check running processes:
+  ps aux | grep python
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+API not responding?
+  → Check service: sudo systemctl status face-api
+  → Check logs: sudo journalctl -u face-api -n 50
+  → Verify port: sudo lsof -i :8000
+
+Can't connect from outside?
+  → Check Security Group in EC2 (allow port 80, 443, 8000)
+  → Check Nginx: sudo systemctl status nginx
+  → Test locally: curl localhost:8000/health
+
+Out of memory?
+  → Use t2.small or t2.medium
+  → Check: free -h
+
+Port already in use?
+  → Find: sudo lsof -i :8000
+  → Kill: sudo kill -9 PID
+
+================================================================================
+COST
+================================================================================
+
+t2.micro (12 months free):   $0/month (AWS Free Tier)
+t2.small:                    ~$10/month
+t2.medium:                   ~$30/month
+Storage (30 GB):             ~$1/month
+Bandwidth (out):             ~$0-5/month (first 100GB free)
+
+TOTAL: $0-15/month (recommended: t2.small = $10/mo)
+
+================================================================================
+CHECKLIST - VERIFY EVERYTHING WORKS
+================================================================================
+
+ [ ] EC2 instance created and running
+ [ ] Security group configured (ports open)
+ [ ] SSH connection working
+ [ ] Dependencies installed
+ [ ] Git repo cloned
+ [ ] Virtual environment created
+ [ ] pip dependencies installed
+ [ ] API starts manually (test with python3 app_sface.py)
+ [ ] Systemd service created
+ [ ] Service is running (systemctl status)
+ [ ] Nginx installed and running
+ [ ] Health endpoint responds (curl http://IP/health)
+ [ ] Web console loads (browser: http://IP/test_console_v2.html)
+ [ ] Can upload reference image
+ [ ] Can test face liveness
+ [ ] Can compare faces
+
+If all checked: ✅ YOU'RE LIVE ON AWS EC2!
+
+================================================================================
+NEXT STEPS (OPTIONAL)
+================================================================================
+
+1. Get Elastic IP (static IP)
+   → EC2 Dashboard → Elastic IPs → Allocate
+   → Associate with your instance
+
+2. Register domain
+   → Use Route 53 or external registrar
+   → Point to your Elastic IP
+
+3. Set up SSL/HTTPS
+   → sudo apt install certbot python3-certbot-nginx
+   → sudo certbot --nginx -d yourdomain.com
+
+4. Monitor with CloudWatch
+   → AWS Console → CloudWatch
+   → Set up alarms and metrics
+
+5. Auto-scaling (Production)
+   → Create AMI from your instance
+   → Set up Auto Scaling Group
+   → Load Balancer
+
+================================================================================
+CONTACT & SUPPORT
+================================================================================
+
+AWS Documentation: https://docs.aws.amazon.com/
+EC2 Help: https://docs.aws.amazon.com/ec2/
+Python/FastAPI: https://fastapi.tiangolo.com/
+Nginx: https://nginx.org/
+
+================================================================================
+YOUR FACE RECOGNITION API IS NOW LIVE ON AWS EC2! 🎉
+================================================================================
