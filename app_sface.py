@@ -470,17 +470,20 @@ def evaluate_liveness(image_bytes: bytes) -> Tuple[bool, float, str]:
         # If eyes are closed, the y-distance between eyes becomes very small
         eye_vertical_distance = abs(right_eye[1] - left_eye[1])
         
-        # VERY STRICT: Minimum vertical distance between eyes must be at least 10px
-        # When eyes are closed, this drops to ~2-5px
-        if eye_vertical_distance < 10.0:
-            eyes_open = False
-        else:
-            eye_aspect_ratio = eye_distance / max(eye_vertical_distance, 1.0)
-            # MUCH STRICTER: Eyes open requires
-            # 1. Eye distance >= 30px (increased from 25)
-            # 2. Aspect ratio >= 2.5 (increased from 2.2) 
-            # BOTH conditions must be true
-            eyes_open = eye_distance >= 30.0 and eye_aspect_ratio >= 2.5
+        # Check if eyes are open by analyzing eye landmarks
+        # When eyes are open: aspect ratio is higher, vertical distance is meaningful
+        # When eyes are closed: landmarks collapse to a line (aspect ratio → infinity but vertical distance → 0)
+        
+        eye_aspect_ratio = eye_distance / max(eye_vertical_distance, 1.0)
+        
+        # RELAXED: Eyes open if:
+        # 1. Eye vertical distance is at least 5px (eyes have vertical separation)
+        # 2. Eye distance >= 25px (eyes are reasonably far apart)
+        # 3. Aspect ratio >= 2.0 (eyes are more horizontal than vertical)
+        # ALL THREE must be true
+        eyes_open = (eye_vertical_distance >= 5.0 and 
+                     eye_distance >= 25.0 and 
+                     eye_aspect_ratio >= 2.0)
         
         # Log eye detection for debugging
         logger.info(f"Eyes detection: distance={eye_distance:.1f}, vertical={eye_vertical_distance:.1f}, open={eyes_open}")
