@@ -116,6 +116,81 @@ except Exception as e:
     logger.warning(f"Failed to load face attribute model: {e}")
     attribute_session = None
 
+# Load MiniFASNetV2 liveness model for anti-spoofing
+LIVENESS_MODEL = "models/2.7_80x80_MiniFASNetV2.onnx"
+try:
+    liveness_session = ort.InferenceSession(LIVENESS_MODEL, providers=["CPUExecutionProvider"])
+    logger.info("✓ MiniFASNetV2 liveness model loaded successfully")
+except Exception as e:
+    logger.warning(f"Failed to load MiniFASNetV2 liveness model: {e}")
+    logger.warning(f"  Anti-spoofing detection will be disabled")
+    liveness_session = None
+
+def check_anti_spoof(image: np.ndarray, face_bbox: np.ndarray) -> Tuple[bool, float]:
+    """
+    Check if face is live or spoofed using MiniFASNetV2.
+    
+    Args:
+        image: Input image (BGR, np.ndarray)
+        face_bbox: Face bounding box [x, y, w, h]
+    
+    Returns:
+        (is_live, live_score) where:
+        - is_live: True if face is detected as live (class 1)
+        - live_score: Confidence score for "live" class (0.0-1.0)
+    """
+    if liveness_session is None:
+        logger.warning("MiniFASNetV2 model not loaded, skipping anti-spoof check")
+        return True, 1.0  # Graceful degradation: assume live if model unavailable
+    
+    try:
+        x, y, w, h = [int(v) for v in face_bbox[:4]]
+        image_h, image_w = image.shape[:2]
+        
+        # Crop with 2.7x scale factor, centered
+        scale = 2.7
+        crop_w = int(w * scale)
+        crop_h = int(h * scale)
+        crop_x = max(0, int(x + w / 2 - crop_w / 2))
+        crop_y = max(0, int(y + h / 2 - crop_h / 2))
+        
+        # Adjust if crop goes out of bounds
+        crop_x = min(crop_x, image_w - crop_w)
+        crop_y = min(crop_y, image_h - crop_h)
+        
+        face_crop = image[crop_y:crop_y + crop_h, crop_x:crop_x + crop_w]
+        
+        # Resize to 80x80
+        face_crop = cv2.resize(face_crop, (80, 80), interpolation=cv2.INTER_LINEAR)
+        
+        # Preprocess: normalize to [0, 1.0]
+        face_crop = face_crop.astype(np.float32) / 255.0
+        
+        # Transpose to (1, 3, 80, 80) - NCHW format
+        face_crop = np.transpose(face_crop, (2, 0, 1))  # (3, 80, 80)
+        face_crop = np.expand_dims(face_crop, axis=0)   # (1, 3, 80, 80)
+        
+        # Run inference
+        input_name = liveness_session.get_inputs()[0].name
+        output_name = liveness_session.get_outputs()[0].name
+        result = liveness_session.run([output_name], {input_name: face_crop})[0]
+        
+        # result is 3-class softmax: [spoof, live, spoof]
+        # Class 1 is "live"
+        softmax_output = result[0]  # (3,)
+        live_score = float(softmax_output[1])  # Probability of class 1 (live)
+        
+        is_live = live_score > 0.5  # Threshold at 0.5
+        
+        logger.info(f"Anti-spoof check: live_score={live_score:.3f}, is_live={is_live}")
+        
+        return is_live, live_score
+        
+    except Exception as e:
+        logger.exception(f"Error in anti-spoof check: {e}")
+        return True, 1.0  # Graceful degradation on error
+
+
 def get_glasses_attributes(image_bytes: bytes) -> Optional[Dict[str, float]]:
     """Return local AI probabilities for eyeglasses and sunglasses."""
     if attribute_session is None:
@@ -183,23 +258,34 @@ def detect_faces(image_bytes: bytes) -> Tuple[Optional[cv2.Mat], Optional[np.nda
             logger.warning("Detector not initialized")
             return img, None
 
-        # Resize for detection - YuNet works better with larger images
+        # Get original dimensions
         h, w = img.shape[:2]
+        logger.info(f"Original image size: {w}x{h}")
         
-        # If image is too small, upscale it
-        if h < 320 or w < 320:
+        # YuNet works best with sizes around 320-640
+        # Resize if needed to improve detection
+        if h > 640 or w > 640:
+            scale = min(640 / h, 640 / w)
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            img_resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+            logger.info(f"Downscaled for detection: {w}x{h} → {new_w}x{new_h}")
+            h, w = new_h, new_w
+            img = img_resized
+        elif h < 320 or w < 320:
             scale = max(320 / h, 320 / w)
             new_w = int(w * scale)
             new_h = int(h * scale)
             img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-            logger.info(f"Upscaled image from {w}x{h} to {new_w}x{new_h}")
-            h, w = new_h, new_w
+            logger.info(f"Upscaled image: {w}x{h} → {new_w}x{new_h}")
+            h, w = new_h, new_h
         
         detector.setInputSize((w, h))
+        logger.info(f"Running detection on {w}x{h} image")
         
-        # OpenCV YuNet returns (face_count, faces).  The landmark rows are
-        # always the second tuple item.
+        # Detect faces
         result = detector.detect(img)
+        logger.info(f"Detection result type: {type(result)}")
         
         # Handle different return types
         if result is None:
@@ -208,21 +294,55 @@ def detect_faces(image_bytes: bytes) -> Tuple[Optional[cv2.Mat], Optional[np.nda
         
         if isinstance(result, tuple):
             detections = result[1]
+            logger.info(f"Detection tuple: count={result[0]}, detections shape={detections.shape if detections is not None else None}")
         else:
             detections = result
+            logger.info(f"Detection direct: shape={detections.shape if detections is not None else None}")
         
         # Ensure detections is ndarray and handle empty case
         if detections is None or (isinstance(detections, np.ndarray) and len(detections) == 0):
-            logger.warning("No faces detected in image")
+            logger.warning("No faces detected")
             return img, np.empty((0, 15), dtype=np.float32)
         
         # Make sure detections is 2D array
         if isinstance(detections, np.ndarray):
             if len(detections.shape) == 1:
                 detections = detections.reshape(1, -1)
-            logger.info(f"Detected {len(detections)} faces")
+            
+            # Filter detections: remove those with invalid landmarks (zeros)
+            valid_detections = []
+            for i, det in enumerate(detections):
+                conf = float(det[-1])
+                # Extract landmarks
+                right_eye_x, right_eye_y = det[4], det[5]
+                left_eye_x, left_eye_y = det[6], det[7]
+                nose_x, nose_y = det[8], det[9]
+                
+                # Check if landmarks are valid (not all zeros, not out of frame)
+                landmarks_valid = (
+                    right_eye_x > 0 and right_eye_y > 0 and
+                    left_eye_x > 0 and left_eye_y > 0 and
+                    nose_x > 0 and nose_y > 0 and
+                    right_eye_x < w and right_eye_y < h and
+                    left_eye_x < w and left_eye_y < h and
+                    nose_x < w and nose_y < h
+                )
+                
+                if landmarks_valid:
+                    valid_detections.append(det)
+                    logger.info(f"Face {i}: confidence={conf:.3f}, bbox=[{det[0]:.0f},{det[1]:.0f},{det[2]:.0f},{det[3]:.0f}] - Valid landmarks")
+                else:
+                    logger.warning(f"Face {i}: confidence={conf:.3f}, bbox=[{det[0]:.0f},{det[1]:.0f},{det[2]:.0f},{det[3]:.0f}] - Invalid landmarks (RE:[{right_eye_x:.0f},{right_eye_y:.0f}], LE:[{left_eye_x:.0f},{left_eye_y:.0f}], N:[{nose_x:.0f},{nose_y:.0f}])")
+            
+            if len(valid_detections) == 0:
+                logger.warning("All detections have invalid landmarks")
+                return img, np.empty((0, 15), dtype=np.float32)
+            
+            detections = np.array(valid_detections)
+            logger.info(f"✓ Detected {len(detections)} faces with valid landmarks")
             return img, detections
         
+        logger.warning("Detections not ndarray")
         return img, None
     except Exception as e:
         logger.exception(f"Error detecting faces: {e}")
@@ -462,33 +582,47 @@ def evaluate_liveness(image_bytes: bytes) -> Tuple[bool, float, str]:
 
         fully_in_frame = x >= 8 and y >= 8 and x + w <= image_w - 8 and y + h <= image_h - 8
         
-        # NEW: Check for eyes open (detect eye closure) - MOVED TO PRIORITY #1
+        # Check for eyes open (detect eye closure and invalid landmarks)
         # Eyes detected at landmarks: right_eye [4,5], left_eye [6,7]
-        # If eyes are very close together or missing, likely closed
         
-        # STRICTER: Calculate eye aspect ratio to detect closed eyes
-        # If eyes are closed, the y-distance between eyes becomes very small
         eye_vertical_distance = abs(right_eye[1] - left_eye[1])
+        eye_horizontal_distance = abs(right_eye[0] - left_eye[0])
+        eye_distance = float(np.linalg.norm(right_eye - left_eye))
         
-        # Check if eyes are open by analyzing eye landmarks
-        # When eyes are open: aspect ratio is higher, vertical distance is meaningful
-        # When eyes are closed: landmarks collapse to a line (aspect ratio → infinity but vertical distance → 0)
+        # Eyes open validation with strict checks:
+        # 1. Eyes landmarks must not be zeros (invalid landmarks)
+        # 2. Eyes must be reasonably separated horizontally (>15px)
+        # 3. Eyes must have reasonable vertical distance (>5px AND <30px - eyes can't be too close or too far)
+        # 4. Aspect ratio should favor horizontal over vertical (eyes wider than tall)
         
-        eye_aspect_ratio = eye_distance / max(eye_vertical_distance, 1.0)
+        if eye_horizontal_distance > 0:
+            eye_aspect_ratio = eye_distance / max(eye_vertical_distance, 0.1)
+        else:
+            eye_aspect_ratio = 0
         
-        # RELAXED: Eyes open if:
-        # 1. Eye vertical distance is at least 5px (eyes have vertical separation)
-        # 2. Eye distance >= 25px (eyes are reasonably far apart)
-        # 3. Aspect ratio >= 2.0 (eyes are more horizontal than vertical)
-        # ALL THREE must be true
-        eyes_open = (eye_vertical_distance >= 5.0 and 
-                     eye_distance >= 25.0 and 
-                     eye_aspect_ratio >= 2.0)
+        # STRICT: Check for invalid landmarks first
+        landmarks_valid = (
+            right_eye[0] > 0 and right_eye[1] > 0 and  # Right eye not at origin
+            left_eye[0] > 0 and left_eye[1] > 0 and    # Left eye not at origin
+            right_eye[0] != left_eye[0]  # Eyes are not at same x position
+        )
         
-        # Log eye detection for debugging
-        logger.info(f"Eyes detection: distance={eye_distance:.1f}, vertical={eye_vertical_distance:.1f}, open={eyes_open}")
+        # Eyes open validation:
+        # - Landmarks must be valid (not zeros/invalid)
+        # - Horizontal distance >= 15px (eyes separated)
+        # - Vertical distance >= 5px (eyes not perfectly aligned) AND <= 30px (eyes not too far apart)
+        # - Aspect ratio >= 1.0 (eyes wider than tall)
+        eyes_open = (
+            landmarks_valid and
+            eye_horizontal_distance >= 15.0 and
+            eye_vertical_distance >= 5.0 and
+            eye_vertical_distance <= 30.0 and
+            eye_aspect_ratio >= 1.0
+        )
         
-        large_enough = face_ratio >= 0.15 and w >= 200 and h >= 200  # STRICTER: 15% of image, 200x200px minimum
+        logger.info(f"Eye analysis: h_dist={eye_horizontal_distance:.1f}, v_dist={eye_vertical_distance:.1f}, aspect={eye_aspect_ratio:.2f}, valid={landmarks_valid}, open={eyes_open}")
+        
+        large_enough = face_ratio >= 0.08 and w >= 100 and h >= 100  # RELAXED: 8% of image, 100x100px minimum
         centred = abs((x + w / 2.0) - image_w / 2.0) <= image_w * 0.25  # Face must be centered (not edges)
         facing_camera = eye_tilt <= 10.0 and nose_offset <= 0.18  # STRICTER: straighter face required
 
@@ -496,18 +630,26 @@ def evaluate_liveness(image_bytes: bytes) -> Tuple[bool, float, str]:
             return False, confidence, "whole_face_not_visible"
         if not eyes_open:  # PRIORITY #1: Check eyes are open FIRST
             return False, confidence, "eyes_closed_or_not_detected"
+        
+        # PRIORITY #2: Anti-spoofing check (before geometric checks)
+        is_live, live_score = check_anti_spoof(img, largest_face)
+        if not is_live:
+            logger.warning(f"Spoof detected via MiniFASNetV2 (live_score={live_score:.3f})")
+            return False, live_score, "spoof_detected"
+        
         if not large_enough:
             return False, confidence, "move_closer_to_camera"
         if not centred:
             return False, confidence, "centre_your_face"
         if not facing_camera:
             return False, confidence, "look_straight_at_camera"
-        if confidence < 0.75:  # STRICTER: higher confidence threshold
+        if confidence < 0.5:  # RELAXED: lower confidence threshold for poor lighting
             return False, confidence, "low_face_detection_confidence"
 
-        # LAST: Check for replay/spoof (after all other checks)
-        if _is_replayed_frame(image_bytes):
-            return False, 0.3, "replay_detected"
+        # NOTE: Replay detection commented out - too aggressive for live camera
+        # The frame hash check was causing false positives on legitimate live captures
+        # if _is_replayed_frame(image_bytes):
+        #     return False, 0.3, "replay_detected"
 
         return True, confidence, "liveness_passed"
     except Exception as e:
@@ -578,6 +720,7 @@ async def health_check():
         "models": {
             "detector_ready": detector is not None,
             "recognizer_ready": recognizer is not None,
+            "liveness_ready": liveness_session is not None,
         },
     }
 
@@ -895,6 +1038,25 @@ async def check_liveness(
 
         # Detect faces
         img, detections = detect_faces(capture_bytes)
+        
+        # Filter out small/low-confidence detections (noise/reflections)
+        if detections is not None and isinstance(detections, np.ndarray):
+            valid_faces = []
+            for detection in detections:
+                x, y, w, h = detection[:4]
+                confidence = float(detection[-1])
+                face_area = w * h
+                image_h, image_w = img.shape[:2]
+                face_ratio = face_area / (image_h * image_w)
+                
+                # Keep only faces that are:
+                # 1. Large enough (>5% of image)
+                # 2. High confidence (>0.7)
+                if face_ratio > 0.05 and confidence > 0.7:
+                    valid_faces.append(detection)
+            
+            detections = np.array(valid_faces) if valid_faces else None
+        
         faces_count = len(detections) if detections is not None and isinstance(detections, np.ndarray) else 0
 
         if faces_count != 1:
@@ -1190,6 +1352,7 @@ async def conditions_info(request: Request):
             "recent_hashes_count": len(RECENT_LIVE_HASHES),
             "detector_ready": detector is not None,
             "recognizer_ready": recognizer is not None,
+            "liveness_ready": liveness_session is not None,
             "storage": {
                 "folder": STORAGE_FOLDER,
                 "stored_images_count": stored_count,
