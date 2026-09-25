@@ -610,17 +610,19 @@ def evaluate_liveness(image_bytes: bytes) -> Tuple[bool, float, str]:
         # Eyes open validation:
         # - Landmarks must be valid (not zeros/invalid)
         # - Horizontal distance >= 15px (eyes separated)
-        # - Vertical distance >= 8px (eyes not perfectly aligned - closed eyes have <5px) AND <= 25px (eyes not too far apart)
-        # - Aspect ratio >= 1.2 (eyes significantly wider than tall)
+        # - Vertical distance >= 5px (eyes not perfectly aligned - closed eyes have <3px) AND <= 30px (eyes not too far apart)
+        # - Aspect ratio >= 1.0 (eyes wider than tall - open eyes have ratio >1, closed eyes have <1)
         eyes_open = (
             landmarks_valid and
             eye_horizontal_distance >= 15.0 and
-            eye_vertical_distance >= 8.0 and
-            eye_vertical_distance <= 25.0 and
-            eye_aspect_ratio >= 1.2
+            eye_vertical_distance >= 5.0 and
+            eye_vertical_distance <= 30.0 and
+            eye_aspect_ratio >= 1.0
         )
         
         logger.info(f"Eye analysis: h_dist={eye_horizontal_distance:.1f}, v_dist={eye_vertical_distance:.1f}, aspect={eye_aspect_ratio:.2f}, valid={landmarks_valid}, open={eyes_open}")
+        logger.debug(f"  Landmarks: right_eye={right_eye}, left_eye={left_eye}")
+        logger.debug(f"  Checks: h_dist>=15: {eye_horizontal_distance >= 15.0}, v_dist>=5: {eye_vertical_distance >= 5.0}, v_dist<=30: {eye_vertical_distance <= 30.0}, aspect>=1.0: {eye_aspect_ratio >= 1.0}")
         
         large_enough = face_ratio >= 0.08 and w >= 100 and h >= 100  # RELAXED: 8% of image, 100x100px minimum
         centred = abs((x + w / 2.0) - image_w / 2.0) <= image_w * 0.25  # Face must be centered (not edges)
