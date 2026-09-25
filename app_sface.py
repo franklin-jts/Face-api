@@ -254,6 +254,13 @@ def detect_faces(image_bytes: bytes) -> Tuple[Optional[cv2.Mat], Optional[np.nda
             logger.warning("Failed to decode image")
             return None, None
 
+        # IMPORTANT: Normalize lighting BEFORE face detection
+        # This helps with bright light and low light conditions
+        img_normalized = normalize_lighting(image_bytes)
+        if img_normalized is not None:
+            img = img_normalized
+            logger.info("Applied lighting normalization for better eye detection")
+        
         if detector is None:
             logger.warning("Detector not initialized")
             return img, None
@@ -609,15 +616,15 @@ def evaluate_liveness(image_bytes: bytes) -> Tuple[bool, float, str]:
         
         # Eyes open validation:
         # - Landmarks must be valid (not zeros/invalid)
-        # - Horizontal distance >= 15px (eyes separated)
-        # - Vertical distance >= 5px (eyes not perfectly aligned - closed eyes have <3px) AND <= 30px (eyes not too far apart)
-        # - Aspect ratio >= 1.0 (eyes wider than tall - open eyes have ratio >1, closed eyes have <1)
+        # - Horizontal distance >= 12px (eyes separated - relaxed from 15px for narrow faces)
+        # - Vertical distance >= 3px (eyes not perfectly aligned - closed eyes have <2px) AND <= 35px (eyes not too far apart)
+        # - Aspect ratio >= 0.8 (eyes wider than tall - relaxed from 1.0 for different face shapes)
         eyes_open = (
             landmarks_valid and
-            eye_horizontal_distance >= 15.0 and
-            eye_vertical_distance >= 5.0 and
-            eye_vertical_distance <= 30.0 and
-            eye_aspect_ratio >= 1.0
+            eye_horizontal_distance >= 12.0 and
+            eye_vertical_distance >= 3.0 and
+            eye_vertical_distance <= 35.0 and
+            eye_aspect_ratio >= 0.8
         )
         
         logger.info(f"Eye analysis: h_dist={eye_horizontal_distance:.1f}, v_dist={eye_vertical_distance:.1f}, aspect={eye_aspect_ratio:.2f}, valid={landmarks_valid}, open={eyes_open}")
