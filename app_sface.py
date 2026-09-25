@@ -610,14 +610,14 @@ def evaluate_liveness(image_bytes: bytes) -> Tuple[bool, float, str]:
         # Eyes open validation:
         # - Landmarks must be valid (not zeros/invalid)
         # - Horizontal distance >= 15px (eyes separated)
-        # - Vertical distance >= 5px (eyes not perfectly aligned) AND <= 30px (eyes not too far apart)
-        # - Aspect ratio >= 1.0 (eyes wider than tall)
+        # - Vertical distance >= 8px (eyes not perfectly aligned - closed eyes have <5px) AND <= 25px (eyes not too far apart)
+        # - Aspect ratio >= 1.2 (eyes significantly wider than tall)
         eyes_open = (
             landmarks_valid and
             eye_horizontal_distance >= 15.0 and
-            eye_vertical_distance >= 5.0 and
-            eye_vertical_distance <= 30.0 and
-            eye_aspect_ratio >= 1.0
+            eye_vertical_distance >= 8.0 and
+            eye_vertical_distance <= 25.0 and
+            eye_aspect_ratio >= 1.2
         )
         
         logger.info(f"Eye analysis: h_dist={eye_horizontal_distance:.1f}, v_dist={eye_vertical_distance:.1f}, aspect={eye_aspect_ratio:.2f}, valid={landmarks_valid}, open={eyes_open}")
@@ -939,12 +939,16 @@ async def compare(
         # Evaluate liveness on file2 (probe image)
         is_live, liveness_score, liveness_reason = evaluate_liveness(bytes2)
 
+        # CRITICAL FIX: Block face match if liveness fails
+        if not is_live:
+            final_match = False
+
         # Evaluate turn challenge
         challenge_passed, yaw_delta, challenge_reason = evaluate_turn_challenge(bytes1, bytes2)
 
         logger.info(
             f"Match: {final_match} (score={final_score}), "
-            f"Liveness: {is_live}, "
+            f"Liveness: {is_live} (reason={liveness_reason}), "
             f"Challenge: {challenge_passed} (yaw_delta={yaw_delta})"
         )
 
@@ -952,7 +956,9 @@ async def compare(
             "status": bool(final_match),
             "message": (
                 "Face recognition successful"
-                if final_match
+                if final_match and is_live
+                else "Face validation failed: eyes are closed or not detected"
+                if not is_live
                 else "Face validation failed: eyewear does not match the reference"
                 if glasses_validation_available and glasses_match is False
                 else "Face recognition not successful"
