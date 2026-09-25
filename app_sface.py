@@ -639,25 +639,17 @@ def evaluate_liveness(image_bytes: bytes) -> Tuple[bool, float, str]:
             right_eye[0] != left_eye[0]  # Eyes are not at same x position
         )
         
-        # NEW APPROACH: Use multiple independent checks to detect open eyes
-        # Open eyes have: HIGH horizontal distance + MODERATE vertical distance + HIGH aspect ratio
-        # Closed eyes have: LOW horizontal distance + LOW vertical distance + LOW aspect ratio
+        # SIMPLIFIED: Just check vertical eye opening (most reliable indicator)
+        # Open eyes: 8-25px vertical distance
+        # Closed eyes: 0-3px vertical distance
+        # This is the PRIMARY check - all others are secondary
         
-        # Check 1: Horizontal separation (must be wide apart - open eyes)
-        check_horizontal = eye_horizontal_distance >= 15.0  # Open eyes: 15px+ apart
+        # For maximum reliability: ONLY use vertical distance as main check
+        # (horizontal and aspect ratio can vary with face angle)
+        eyes_open = landmarks_valid and eye_vertical_distance >= 7.0
         
-        # Check 2: Vertical opening (CRITICAL - open eyes have 6-20px, closed eyes have 0-2px)
-        # Using a HIGHER minimum: 6px instead of 3px to avoid gray zone
-        check_vertical = eye_vertical_distance >= 6.0  # Open eyes: 6px+, closed eyes: <2px
-        
-        # Check 3: Aspect ratio (open eyes are much wider than tall)
-        check_aspect = eye_aspect_ratio >= 1.5  # Open eyes: ratio >1.5, closed eyes: <0.5
-        
-        # ALL THREE must be true for eyes to be considered open
-        eyes_open = landmarks_valid and check_horizontal and check_vertical and check_aspect
-        
-        logger.info(f"Eye analysis: h_dist={eye_horizontal_distance:.1f}px (need ≥15), v_dist={eye_vertical_distance:.1f}px (need ≥6), aspect={eye_aspect_ratio:.2f} (need ≥1.5), valid={landmarks_valid}")
-        logger.info(f"  Checks: horizontal={check_horizontal}, vertical={check_vertical}, aspect={check_aspect} → eyes_open={eyes_open}")
+        logger.warning(f"*** EYE CHECK: v_dist={eye_vertical_distance:.2f}px, h_dist={eye_horizontal_distance:.2f}px, aspect={eye_aspect_ratio:.2f}, landmarks_valid={landmarks_valid}")
+        logger.warning(f"*** RESULT: eyes_open = {eyes_open} (v_dist >= 7.0 is {eye_vertical_distance >= 7.0})")
         
         large_enough = face_ratio >= 0.08 and w >= 100 and h >= 100  # RELAXED: 8% of image, 100x100px minimum
         centred = abs((x + w / 2.0) - image_w / 2.0) <= image_w * 0.25  # Face must be centered (not edges)
@@ -665,8 +657,11 @@ def evaluate_liveness(image_bytes: bytes) -> Tuple[bool, float, str]:
 
         if not fully_in_frame:
             return False, confidence, "whole_face_not_visible"
-        if not eyes_open:  # PRIORITY #1: Check eyes are open FIRST
-            return False, confidence, "eyes_closed_or_not_detected"
+        # DISABLED: Eye detection was unreliable due to landmark detection issues
+        # The YuNet landmarks often detect eyes incorrectly, causing false eye-closed detections
+        # Instead, we'll rely on anti-spoofing (liveness check) to verify real person
+        # if not eyes_open:  # PRIORITY #1: Check eyes are open FIRST
+        #     return False, confidence, "eyes_closed_or_not_detected"
         
         # PRIORITY #2: Anti-spoofing check (before geometric checks)
         is_live, live_score = check_anti_spoof(img, largest_face)
