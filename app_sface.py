@@ -627,12 +627,6 @@ def evaluate_liveness(image_bytes: bytes) -> Tuple[bool, float, str]:
         eye_horizontal_distance = abs(right_eye[0] - left_eye[0])
         eye_distance = float(np.linalg.norm(right_eye - left_eye))
         
-        # Eyes open validation with strict checks:
-        # 1. Eyes landmarks must not be zeros (invalid landmarks)
-        # 2. Eyes must be reasonably separated horizontally (>15px)
-        # 3. Eyes must have reasonable vertical distance (>5px AND <30px - eyes can't be too close or too far)
-        # 4. Aspect ratio should favor horizontal over vertical (eyes wider than tall)
-        
         if eye_horizontal_distance > 0:
             eye_aspect_ratio = eye_distance / max(eye_vertical_distance, 0.1)
         else:
@@ -645,22 +639,25 @@ def evaluate_liveness(image_bytes: bytes) -> Tuple[bool, float, str]:
             right_eye[0] != left_eye[0]  # Eyes are not at same x position
         )
         
-        # Eyes open validation:
-        # - Landmarks must be valid (not zeros/invalid)
-        # - Horizontal distance >= 12px (eyes separated - relaxed from 15px for narrow faces)
-        # - Vertical distance >= 3px (eyes not perfectly aligned - closed eyes have <2px) AND <= 35px (eyes not too far apart)
-        # - Aspect ratio >= 0.8 (eyes wider than tall - relaxed from 1.0 for different face shapes)
-        eyes_open = (
-            landmarks_valid and
-            eye_horizontal_distance >= 12.0 and
-            eye_vertical_distance >= 3.0 and
-            eye_vertical_distance <= 35.0 and
-            eye_aspect_ratio >= 0.8
-        )
+        # NEW APPROACH: Use multiple independent checks to detect open eyes
+        # Open eyes have: HIGH horizontal distance + MODERATE vertical distance + HIGH aspect ratio
+        # Closed eyes have: LOW horizontal distance + LOW vertical distance + LOW aspect ratio
         
-        logger.info(f"Eye analysis: h_dist={eye_horizontal_distance:.1f}, v_dist={eye_vertical_distance:.1f}, aspect={eye_aspect_ratio:.2f}, valid={landmarks_valid}, open={eyes_open}")
-        logger.debug(f"  Landmarks: right_eye={right_eye}, left_eye={left_eye}")
-        logger.debug(f"  Checks: h_dist>=15: {eye_horizontal_distance >= 15.0}, v_dist>=5: {eye_vertical_distance >= 5.0}, v_dist<=30: {eye_vertical_distance <= 30.0}, aspect>=1.0: {eye_aspect_ratio >= 1.0}")
+        # Check 1: Horizontal separation (must be wide apart - open eyes)
+        check_horizontal = eye_horizontal_distance >= 15.0  # Open eyes: 15px+ apart
+        
+        # Check 2: Vertical opening (CRITICAL - open eyes have 6-20px, closed eyes have 0-2px)
+        # Using a HIGHER minimum: 6px instead of 3px to avoid gray zone
+        check_vertical = eye_vertical_distance >= 6.0  # Open eyes: 6px+, closed eyes: <2px
+        
+        # Check 3: Aspect ratio (open eyes are much wider than tall)
+        check_aspect = eye_aspect_ratio >= 1.5  # Open eyes: ratio >1.5, closed eyes: <0.5
+        
+        # ALL THREE must be true for eyes to be considered open
+        eyes_open = landmarks_valid and check_horizontal and check_vertical and check_aspect
+        
+        logger.info(f"Eye analysis: h_dist={eye_horizontal_distance:.1f}px (need ≥15), v_dist={eye_vertical_distance:.1f}px (need ≥6), aspect={eye_aspect_ratio:.2f} (need ≥1.5), valid={landmarks_valid}")
+        logger.info(f"  Checks: horizontal={check_horizontal}, vertical={check_vertical}, aspect={check_aspect} → eyes_open={eyes_open}")
         
         large_enough = face_ratio >= 0.08 and w >= 100 and h >= 100  # RELAXED: 8% of image, 100x100px minimum
         centred = abs((x + w / 2.0) - image_w / 2.0) <= image_w * 0.25  # Face must be centered (not edges)
