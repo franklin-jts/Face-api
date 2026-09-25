@@ -510,7 +510,7 @@ def enhance_low_light(image: cv2.Mat) -> cv2.Mat:
 # Normalize lighting
 # ==============================
 def normalize_lighting(image_bytes: bytes) -> np.ndarray:
-    """Normalize lighting in image."""
+    """Normalize lighting in image - handles both underexposure and overexposure."""
     try:
         np_img = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
@@ -523,9 +523,26 @@ def normalize_lighting(image_bytes: bytes) -> np.ndarray:
         # Check brightness
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         brightness = np.mean(gray)
+        logger.info(f"Image brightness: {brightness:.1f}")
 
+        # Handle underexposure (dark image)
         if brightness < BRIGHTNESS_THRESHOLD:
+            logger.info("Low light detected - enhancing")
             img = enhance_low_light(img)
+        
+        # Handle overexposure (bright washed-out image)
+        elif brightness > 210:  # Very bright image (overexposed)
+            logger.info("Overexposure detected - reducing brightness")
+            # Reduce brightness and increase contrast to recover detail
+            lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+            l, a, b = cv2.split(lab)
+            # Reduce L channel brightness
+            l = cv2.convertScaleAbs(l, alpha=0.7, beta=-20)
+            # Increase contrast in a and b channels
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            l = clahe.apply(l)
+            lab = cv2.merge((l, a, b))
+            img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
         return img
     except Exception as e:
@@ -565,6 +582,20 @@ def evaluate_liveness(image_bytes: bytes) -> Tuple[bool, float, str]:
     Returns (is_live, score, reason).
     """
     try:
+        # Check image brightness quality FIRST
+        np_img_check = np.frombuffer(image_bytes, np.uint8)
+        img_check = cv2.imdecode(np_img_check, cv2.IMREAD_COLOR)
+        if img_check is not None:
+            gray_check = cv2.cvtColor(img_check, cv2.COLOR_BGR2GRAY)
+            brightness_raw = np.mean(gray_check)
+            # Reject if extremely overexposed (almost white) or extremely dark (almost black)
+            if brightness_raw > 235:
+                logger.warning(f"Image too bright/overexposed (brightness={brightness_raw:.1f}) - cannot detect features")
+                return False, 0.0, "image_overexposed_too_bright"
+            if brightness_raw < 20:
+                logger.warning(f"Image too dark (brightness={brightness_raw:.1f}) - cannot detect features")
+                return False, 0.0, "image_too_dark"
+        
         # Detect face FIRST (don't check replay yet)
         img, detections = detect_faces(image_bytes)
         if img is None or detections is None or len(detections) == 0:
