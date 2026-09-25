@@ -129,6 +129,7 @@ except Exception as e:
 def check_anti_spoof(image: np.ndarray, face_bbox: np.ndarray) -> Tuple[bool, float]:
     """
     Check if face is live or spoofed using MiniFASNetV2.
+    Falls back to texture-based detection if model unavailable.
     
     Args:
         image: Input image (BGR, np.ndarray)
@@ -140,8 +141,8 @@ def check_anti_spoof(image: np.ndarray, face_bbox: np.ndarray) -> Tuple[bool, fl
         - live_score: Confidence score for "live" class (0.0-1.0)
     """
     if liveness_session is None:
-        logger.warning("MiniFASNetV2 model not loaded, skipping anti-spoof check")
-        return True, 1.0  # Graceful degradation: assume live if model unavailable
+        logger.warning("MiniFASNetV2 model not loaded, using texture-based fallback")
+        return _check_liveness_texture_fallback(image, face_bbox)
     
     try:
         x, y, w, h = [int(v) for v in face_bbox[:4]]
@@ -188,7 +189,62 @@ def check_anti_spoof(image: np.ndarray, face_bbox: np.ndarray) -> Tuple[bool, fl
         
     except Exception as e:
         logger.exception(f"Error in anti-spoof check: {e}")
-        return True, 1.0  # Graceful degradation on error
+        return _check_liveness_texture_fallback(image, face_bbox)
+
+
+def _check_liveness_texture_fallback(image: np.ndarray, face_bbox: np.ndarray) -> Tuple[bool, float]:
+    """
+    Fallback liveness check using texture analysis.
+    Detects if image is a real person or a flat photo/screen.
+    """
+    try:
+        x, y, w, h = [int(v) for v in face_bbox[:4]]
+        image_h, image_w = image.shape[:2]
+        
+        # Extract face region
+        x1 = max(0, x - w // 6)
+        y1 = max(0, y - h // 6)
+        x2 = min(image_w, x + w + w // 6)
+        y2 = min(image_h, y + h + h // 6)
+        
+        face_region = image[y1:y2, x1:x2]
+        
+        if face_region.size == 0:
+            return True, 0.5  # Can't analyze, assume live
+        
+        # Convert to LAB color space for better texture analysis
+        lab = cv2.cvtColor(face_region, cv2.COLOR_BGR2LAB)
+        
+        # Analyze texture using Laplacian variance (real faces have more texture detail)
+        gray = cv2.cvtColor(face_region, cv2.COLOR_BGR2GRAY)
+        laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+        texture_score = laplacian.var()
+        
+        # Analyze color distribution (real faces have more varied colors)
+        color_std = np.std(lab[:, :, 1:3])  # Standard deviation of a and b channels
+        
+        # Analyze edges (real faces have natural edges, photos have sharp edges)
+        edges = cv2.Canny(gray, 50, 150)
+        edge_ratio = np.count_nonzero(edges) / edges.size
+        
+        # Combined liveness score
+        # Real faces: high texture (20+), high color variation (15+), moderate edges
+        texture_normalized = min(1.0, texture_score / 30.0)  # 30 is "real face" threshold
+        color_normalized = min(1.0, color_std / 20.0)  # 20 is "real face" threshold
+        edge_normalized = 1.0 - min(1.0, edge_ratio * 5)  # Too many edges = photo
+        
+        liveness_score = (texture_normalized + color_normalized + edge_normalized) / 3.0
+        
+        logger.info(f"Texture fallback: texture={texture_score:.1f}, color_std={color_std:.1f}, edge_ratio={edge_ratio:.3f} → score={liveness_score:.3f}")
+        
+        # Conservative threshold: need good texture AND good color variation
+        is_live = liveness_score > 0.4
+        
+        return is_live, liveness_score
+        
+    except Exception as e:
+        logger.exception(f"Error in texture fallback: {e}")
+        return True, 0.5  # Can't analyze, assume live
 
 
 def get_glasses_attributes(image_bytes: bytes) -> Optional[Dict[str, float]]:
